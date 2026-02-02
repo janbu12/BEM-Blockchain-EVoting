@@ -48,19 +48,22 @@ export default function LoginPage() {
 function AdminLoginCard() {
   const router = useRouter();
   const { address, isConnected } = useAccount();
+  const adminMode = (process.env.NEXT_PUBLIC_ADMIN_MODE ?? "wallet").toLowerCase();
+  const useRelayer = adminMode === "relayer";
   const chainId = useChainId();
   const isSupportedChain = chainId === VOTING_CHAIN_ID;
   const { data: adminAddress } = useReadContract({
     address: VOTING_ADDRESS,
     abi: VOTING_ABI,
     functionName: "admin",
-    query: { enabled: isConnected && isSupportedChain },
+    query: { enabled: !useRelayer && isConnected && isSupportedChain },
   });
 
-  const isAdmin =
-    !!address &&
-    !!adminAddress &&
-    address.toLowerCase() === String(adminAddress).toLowerCase();
+  const isAdmin = useRelayer
+    ? true
+    : !!address &&
+      !!adminAddress &&
+      address.toLowerCase() === String(adminAddress).toLowerCase();
 
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -70,7 +73,15 @@ function AdminLoginCard() {
       </p>
 
       <div className="mt-5 space-y-4">
-        {isConnected ? <Connection /> : <WalletOptions />}
+        {useRelayer ? (
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+            Mode relayer admin aktif. Login tanpa wallet.
+          </div>
+        ) : isConnected ? (
+          <Connection />
+        ) : (
+          <WalletOptions />
+        )}
       </div>
 
       <div className="mt-5">
@@ -81,12 +92,12 @@ function AdminLoginCard() {
         >
           {isAdmin ? "Masuk Admin" : "Hubungkan wallet admin dulu"}
         </button>
-        {isConnected && !isSupportedChain && (
+        {!useRelayer && isConnected && !isSupportedChain && (
           <p className="mt-2 text-xs text-rose-600">
             Jaringan tidak sesuai. Gunakan Localhost 8545 (chainId 31337).
           </p>
         )}
-        {isConnected && isSupportedChain && !isAdmin && (
+        {!useRelayer && isConnected && isSupportedChain && !isAdmin && (
           <p className="mt-2 text-xs text-slate-500">
             Wallet yang terhubung bukan admin kontrak.
           </p>

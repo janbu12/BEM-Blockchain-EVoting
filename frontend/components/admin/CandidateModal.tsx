@@ -28,6 +28,9 @@ export function CandidateModal({
   onClose,
 }: Props) {
   const { push } = useToast();
+  const adminMode = (process.env.NEXT_PUBLIC_ADMIN_MODE ?? "wallet").toLowerCase();
+  const useRelayer = adminMode === "relayer";
+  const adminKey = process.env.NEXT_PUBLIC_ADMIN_KEY ?? "";
   const [selectedElectionId, setSelectedElectionId] = useState<bigint | null>(
     activeElectionId ?? (electionIds[0] ?? null)
   );
@@ -39,29 +42,31 @@ export function CandidateModal({
     }
   }, [activeElectionId]);
 
+  const [addRelayHash, setAddRelayHash] = useState<`0x${string}` | null>(null);
+  const [isAddingRelayer, setIsAddingRelayer] = useState(false);
   const {
     data: addHash,
-    isPending: isAdding,
+    isPending: isAddingWallet,
     writeContract: addCandidate,
     error: addError,
   } = useWriteContract();
+  const activeAddHash = useRelayer ? addRelayHash : addHash;
   const {
     data: addReceipt,
     isLoading: isAddConfirming,
     isSuccess: isAddSuccess,
-  } =
-    useWaitForTransactionReceipt({
-      hash: addHash,
-      confirmations: 1,
-      query: { enabled: !!addHash },
-    });
+  } = useWaitForTransactionReceipt({
+    hash: activeAddHash ?? undefined,
+    confirmations: 1,
+    query: { enabled: !!activeAddHash },
+  });
 
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (isAddSuccess && selectedElectionId && addHash) {
-      if (handledHashRef.current === addHash) return;
-      handledHashRef.current = addHash;
+    if (isAddSuccess && selectedElectionId && activeAddHash) {
+      if (handledHashRef.current === activeAddHash) return;
+      handledHashRef.current = activeAddHash;
       queryClient.invalidateQueries({
         queryKey: readContractQueryKey({
           address: VOTING_ADDRESS,
@@ -73,7 +78,7 @@ export function CandidateModal({
       push(
         formatTxToast(
           "Kandidat berhasil ditambah",
-          addHash,
+          activeAddHash,
           addReceipt?.blockNumber
         ),
         "success"
@@ -89,6 +94,32 @@ export function CandidateModal({
       push("Transaksi dibatalkan", "info");
     }
   }, [addError, push]);
+
+  async function callAdminRelayer<T>(endpoint: string, body: T) {
+    if (!adminKey) {
+      push("Admin key belum diisi", "error");
+      return null;
+    }
+    try {
+      const res = await fetch(`http://localhost:4000${endpoint}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-key": adminKey,
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        push(data?.reason ?? "Gagal memproses transaksi", "error");
+        return null;
+      }
+      return data as { hash?: `0x${string}` };
+    } catch {
+      push("Gagal menghubungi backend", "error");
+      return null;
+    }
+  }
 
   return (
     <Modal
@@ -133,6 +164,17 @@ export function CandidateModal({
           <button
             onClick={() => {
               if (!selectedElectionId) return;
+              if (useRelayer) {
+                setIsAddingRelayer(true);
+                callAdminRelayer("/admin/chain/add-candidate", {
+                  electionId: selectedElectionId.toString(),
+                  name: candidateName.trim(),
+                }).then((result) => {
+                  if (result?.hash) setAddRelayHash(result.hash);
+                  setIsAddingRelayer(false);
+                });
+                return;
+              }
               addCandidate({
                 address: VOTING_ADDRESS,
                 abi: VOTING_ABI,
@@ -141,15 +183,18 @@ export function CandidateModal({
               });
             }}
             disabled={
-              isAdding ||
+              isAddingWallet ||
+              isAddingRelayer ||
               isAddConfirming ||
               !selectedElectionId ||
               candidateName.trim().length === 0
             }
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
           >
-            {isAdding
-              ? "Menunggu MetaMask..."
+            {isAddingWallet || isAddingRelayer
+              ? useRelayer
+                ? "Mengirim..."
+                : "Menunggu MetaMask..."
               : isAddConfirming
               ? "Mengonfirmasi..."
               : "Simpan"}

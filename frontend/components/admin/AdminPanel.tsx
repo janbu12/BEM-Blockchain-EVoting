@@ -9,30 +9,33 @@ export function AdminPanel() {
   const { address } = useAccount();
   const chainId = useChainId();
   const isSupportedChain = chainId === VOTING_CHAIN_ID;
+  const adminMode = (process.env.NEXT_PUBLIC_ADMIN_MODE ?? "wallet").toLowerCase();
+  const useRelayer = adminMode === "relayer";
   const { data: electionsCount } = useReadContract({
     address: VOTING_ADDRESS,
     abi: VOTING_ABI,
     functionName: "electionsCount",
-    query: { enabled: !!address && isSupportedChain },
+    query: { enabled: useRelayer || (!!address && isSupportedChain) },
   });
   const { data: adminAddress } = useReadContract({
     address: VOTING_ADDRESS,
     abi: VOTING_ABI,
     functionName: "admin",
-    query: { enabled: !!address && isSupportedChain },
+    query: { enabled: useRelayer || (!!address && isSupportedChain) },
   });
 
-  const isAdmin =
-    !!address &&
-    !!adminAddress &&
-    address.toLowerCase() === String(adminAddress).toLowerCase();
+  const isAdmin = useRelayer
+    ? true
+    : !!address &&
+      !!adminAddress &&
+      address.toLowerCase() === String(adminAddress).toLowerCase();
 
   const electionIds = useMemo(() => {
     const n = Number(electionsCount ?? 0n);
     return Array.from({ length: n }, (_, i) => BigInt(i + 1));
   }, [electionsCount]);
 
-  if (!address) return null;
+  if (!useRelayer && !address) return null;
 
   return (
     <div className="mt-8 border-t border-slate-200 pt-6">
@@ -44,7 +47,7 @@ export function AdminPanel() {
             isAdmin ? "text-emerald-600" : "text-slate-400"
           }`}
         >
-          {isAdmin ? "Admin" : "Bukan admin"}
+          {useRelayer ? "Relayer" : isAdmin ? "Admin" : "Bukan admin"}
         </span>
       </p>
       {isAdmin ? (

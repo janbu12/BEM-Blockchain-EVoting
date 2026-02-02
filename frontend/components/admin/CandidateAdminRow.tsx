@@ -24,51 +24,58 @@ type Props = {
 export function CandidateAdminRow({ electionId, candidateId, isOpen }: Props) {
   const chainId = useChainId();
   const isSupportedChain = chainId === VOTING_CHAIN_ID;
+  const adminMode = (process.env.NEXT_PUBLIC_ADMIN_MODE ?? "wallet").toLowerCase();
+  const useRelayer = adminMode === "relayer";
+  const adminKey = process.env.NEXT_PUBLIC_ADMIN_KEY ?? "";
   const { data } = useReadContract({
     address: VOTING_ADDRESS,
     abi: VOTING_ABI,
     functionName: "getCandidate",
     args: [electionId, candidateId],
-    query: { enabled: isSupportedChain },
+    query: { enabled: isSupportedChain || useRelayer },
   });
 
   const { push } = useToast();
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editName, setEditName] = useState("");
 
+  const [editRelayHash, setEditRelayHash] = useState<`0x${string}` | null>(null);
+  const [isEditingRelayer, setIsEditingRelayer] = useState(false);
   const {
     data: editHash,
-    isPending: isEditing,
+    isPending: isEditingWallet,
     writeContract: updateCandidate,
     error: editError,
   } = useWriteContract();
+  const activeEditHash = useRelayer ? editRelayHash : editHash;
   const {
     data: editReceipt,
     isLoading: isEditConfirming,
     isSuccess: isEditSuccess,
-  } =
-    useWaitForTransactionReceipt({
-      hash: editHash,
-      confirmations: 1,
-      query: { enabled: !!editHash },
-    });
+  } = useWaitForTransactionReceipt({
+    hash: activeEditHash ?? undefined,
+    confirmations: 1,
+    query: { enabled: !!activeEditHash },
+  });
 
+  const [hideRelayHash, setHideRelayHash] = useState<`0x${string}` | null>(null);
+  const [isHidingRelayer, setIsHidingRelayer] = useState(false);
   const {
     data: hideHash,
-    isPending: isHiding,
+    isPending: isHidingWallet,
     writeContract: hideCandidate,
     error: hideError,
   } = useWriteContract();
+  const activeHideHash = useRelayer ? hideRelayHash : hideHash;
   const {
     data: hideReceipt,
     isLoading: isHideConfirming,
     isSuccess: isHideSuccess,
-  } =
-    useWaitForTransactionReceipt({
-      hash: hideHash,
-      confirmations: 1,
-      query: { enabled: !!hideHash },
-    });
+  } = useWaitForTransactionReceipt({
+    hash: activeHideHash ?? undefined,
+    confirmations: 1,
+    query: { enabled: !!activeHideHash },
+  });
 
   const queryClient = useQueryClient();
 
@@ -85,7 +92,7 @@ export function CandidateAdminRow({ electionId, candidateId, isOpen }: Props) {
       push(
         formatTxToast(
           "Kandidat berhasil diupdate",
-          editHash,
+          activeEditHash,
           editReceipt?.blockNumber
         ),
         "success"
@@ -117,7 +124,7 @@ export function CandidateAdminRow({ electionId, candidateId, isOpen }: Props) {
       push(
         formatTxToast(
           "Kandidat disembunyikan",
-          hideHash,
+          activeHideHash,
           hideReceipt?.blockNumber
         ),
         "success"
@@ -130,6 +137,32 @@ export function CandidateAdminRow({ electionId, candidateId, isOpen }: Props) {
       push("Transaksi dibatalkan", "info");
     }
   }, [editError, hideError, push]);
+
+  async function callAdminRelayer<T>(endpoint: string, body: T) {
+    if (!adminKey) {
+      push("Admin key belum diisi", "error");
+      return null;
+    }
+    try {
+      const res = await fetch(`http://localhost:4000${endpoint}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-key": adminKey,
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        push(data?.reason ?? "Gagal memproses transaksi", "error");
+        return null;
+      }
+      return data as { hash?: `0x${string}` };
+    } catch {
+      push("Gagal menghubungi backend", "error");
+      return null;
+    }
+  }
 
   if (!data) {
     return (
@@ -172,6 +205,17 @@ export function CandidateAdminRow({ electionId, candidateId, isOpen }: Props) {
           <button
             onClick={() => {
               if (!window.confirm("Sembunyikan kandidat ini?")) return;
+              if (useRelayer) {
+                setIsHidingRelayer(true);
+                callAdminRelayer("/admin/chain/hide-candidate", {
+                  electionId: electionId.toString(),
+                  candidateId: cid.toString(),
+                }).then((result) => {
+                  if (result?.hash) setHideRelayHash(result.hash);
+                  setIsHidingRelayer(false);
+                });
+                return;
+              }
               hideCandidate({
                 address: VOTING_ADDRESS,
                 abi: VOTING_ABI,
@@ -179,10 +223,17 @@ export function CandidateAdminRow({ electionId, candidateId, isOpen }: Props) {
                 args: [electionId, cid],
               });
             }}
-            disabled={disabled || isHiding || isHideConfirming}
+            disabled={
+              disabled ||
+              isHidingWallet ||
+              isHidingRelayer ||
+              isHideConfirming
+            }
             className="rounded-md border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:text-rose-300"
           >
-            {isHiding || isHideConfirming ? "Memproses..." : "Hide"}
+            {isHidingWallet || isHidingRelayer || isHideConfirming
+              ? "Memproses..."
+              : "Hide"}
           </button>
         </div>
       </div>
@@ -201,14 +252,25 @@ export function CandidateAdminRow({ electionId, candidateId, isOpen }: Props) {
         onCandidateNameChange={setEditName}
         onClose={() => setIsEditOpen(false)}
         onSave={() =>
-          updateCandidate({
-            address: VOTING_ADDRESS,
-            abi: VOTING_ABI,
-            functionName: "updateCandidate",
-            args: [electionId, cid, editName.trim()],
-          })
+          useRelayer
+            ? (async () => {
+                setIsEditingRelayer(true);
+                const result = await callAdminRelayer("/admin/chain/update-candidate", {
+                  electionId: electionId.toString(),
+                  candidateId: cid.toString(),
+                  name: editName.trim(),
+                });
+                if (result?.hash) setEditRelayHash(result.hash);
+                setIsEditingRelayer(false);
+              })()
+            : updateCandidate({
+                address: VOTING_ADDRESS,
+                abi: VOTING_ABI,
+                functionName: "updateCandidate",
+                args: [electionId, cid, editName.trim()],
+              })
         }
-        isSaving={isEditing || isEditConfirming}
+        isSaving={isEditingWallet || isEditingRelayer || isEditConfirming}
       />
     </div>
   );

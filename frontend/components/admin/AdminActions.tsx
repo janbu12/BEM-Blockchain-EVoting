@@ -13,45 +13,52 @@ import { isUserRejectedError } from "./utils";
 
 export function AdminActions({ electionIds }: { electionIds: bigint[] }) {
   const { push } = useToast();
+  const adminMode = (process.env.NEXT_PUBLIC_ADMIN_MODE ?? "wallet").toLowerCase();
+  const useRelayer = adminMode === "relayer";
+  const adminKey = process.env.NEXT_PUBLIC_ADMIN_KEY ?? "";
   const [title, setTitle] = useState("");
   const [candidateName, setCandidateName] = useState("");
   const [activeElectionId, setActiveElectionId] = useState<bigint | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [statusElectionId, setStatusElectionId] = useState<bigint | null>(null);
 
+  const [createRelayHash, setCreateRelayHash] = useState<`0x${string}` | null>(null);
+  const [isCreatingRelayer, setIsCreatingRelayer] = useState(false);
   const {
     data: createHash,
-    isPending: isCreating,
+    isPending: isCreatingWallet,
     writeContract: createElection,
     error: createError,
   } = useWriteContract();
+  const activeCreateHash = useRelayer ? createRelayHash : createHash;
   const {
     data: createReceipt,
     isLoading: isCreateConfirming,
     isSuccess: isCreateSuccess,
-  } =
-    useWaitForTransactionReceipt({
-      hash: createHash,
-      confirmations: 1,
-      query: { enabled: !!createHash },
-    });
+  } = useWaitForTransactionReceipt({
+    hash: activeCreateHash ?? undefined,
+    confirmations: 1,
+    query: { enabled: !!activeCreateHash },
+  });
 
+  const [statusRelayHash, setStatusRelayHash] = useState<`0x${string}` | null>(null);
+  const [isChangingStatusRelayer, setIsChangingStatusRelayer] = useState(false);
   const {
     data: statusHash,
-    isPending: isChangingStatus,
+    isPending: isChangingStatusWallet,
     writeContract: changeStatus,
     error: statusError,
   } = useWriteContract();
+  const activeStatusHash = useRelayer ? statusRelayHash : statusHash;
   const {
     data: statusReceipt,
     isLoading: isStatusConfirming,
     isSuccess: isStatusSuccess,
-  } =
-    useWaitForTransactionReceipt({
-      hash: statusHash,
-      confirmations: 1,
-      query: { enabled: !!statusHash },
-    });
+  } = useWaitForTransactionReceipt({
+    hash: activeStatusHash ?? undefined,
+    confirmations: 1,
+    query: { enabled: !!activeStatusHash },
+  });
 
   const queryClient = useQueryClient();
 
@@ -65,7 +72,11 @@ export function AdminActions({ electionIds }: { electionIds: bigint[] }) {
         }),
       });
       push(
-        formatTxToast("Event berhasil dibuat", createHash, createReceipt?.blockNumber),
+        formatTxToast(
+          "Event berhasil dibuat",
+          activeCreateHash ?? undefined,
+          createReceipt?.blockNumber
+        ),
         "success"
       );
       setTimeout(() => {
@@ -87,7 +98,7 @@ export function AdminActions({ electionIds }: { electionIds: bigint[] }) {
       push(
         formatTxToast(
           "Status pemilihan diperbarui",
-          statusHash,
+          activeStatusHash ?? undefined,
           statusReceipt?.blockNumber
         ),
         "success"
@@ -107,6 +118,32 @@ export function AdminActions({ electionIds }: { electionIds: bigint[] }) {
     }
   }, [statusError, push]);
 
+  async function callAdminRelayer<T>(endpoint: string, body: T) {
+    if (!adminKey) {
+      push("Admin key belum diisi", "error");
+      return null;
+    }
+    try {
+      const res = await fetch(`http://localhost:4000${endpoint}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-admin-key": adminKey,
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        push(data?.reason ?? "Gagal memproses transaksi", "error");
+        return null;
+      }
+      return data as { hash?: `0x${string}` };
+    } catch {
+      push("Gagal menghubungi backend", "error");
+      return null;
+    }
+  }
+
   return (
     <div className="mt-6 space-y-6">
       <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -123,18 +160,36 @@ export function AdminActions({ electionIds }: { electionIds: bigint[] }) {
           />
           <button
             onClick={() =>
-              createElection({
-                address: VOTING_ADDRESS,
-                abi: VOTING_ABI,
-                functionName: "createElection",
-                args: [title.trim()],
-              })
+              (async () => {
+                if (useRelayer) {
+                  setIsCreatingRelayer(true);
+                  const result = await callAdminRelayer("/admin/chain/create-election", {
+                    title: title.trim(),
+                  });
+                  if (result?.hash) setCreateRelayHash(result.hash);
+                  setIsCreatingRelayer(false);
+                } else {
+                  createElection({
+                    address: VOTING_ADDRESS,
+                    abi: VOTING_ABI,
+                    functionName: "createElection",
+                    args: [title.trim()],
+                  });
+                }
+              })()
             }
-            disabled={isCreating || isCreateConfirming || title.trim().length === 0}
+            disabled={
+              isCreatingWallet ||
+              isCreatingRelayer ||
+              isCreateConfirming ||
+              title.trim().length === 0
+            }
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
           >
-            {isCreating
-              ? "Menunggu MetaMask..."
+            {isCreatingWallet || isCreatingRelayer
+              ? useRelayer
+                ? "Mengirim..."
+                : "Menunggu MetaMask..."
               : isCreateConfirming
               ? "Mengonfirmasi..."
               : "Buat"}
@@ -174,6 +229,17 @@ export function AdminActions({ electionIds }: { electionIds: bigint[] }) {
                 }}
                 onToggleStatus={(isOpen) => {
                   setStatusElectionId(id);
+                  if (useRelayer) {
+                    setIsChangingStatusRelayer(true);
+                    callAdminRelayer(
+                      isOpen ? "/admin/chain/close-election" : "/admin/chain/open-election",
+                      { electionId: id.toString() }
+                    ).then((result) => {
+                      if (result?.hash) setStatusRelayHash(result.hash);
+                      setIsChangingStatusRelayer(false);
+                    });
+                    return;
+                  }
                   changeStatus({
                     address: VOTING_ADDRESS,
                     abi: VOTING_ABI,
@@ -181,7 +247,9 @@ export function AdminActions({ electionIds }: { electionIds: bigint[] }) {
                     args: [id],
                   });
                 }}
-                isStatusPending={isChangingStatus || isStatusConfirming}
+                isStatusPending={
+                  isChangingStatusWallet || isChangingStatusRelayer || isStatusConfirming
+                }
               />
             ))}
           </div>

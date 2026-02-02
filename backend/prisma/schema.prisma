@@ -7,11 +7,25 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum VerificationStatus {
+  NONE
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
 model Student {
   id                 Int      @id @default(autoincrement())
   nim                String   @unique
   passwordHash       String
   mustChangePassword Boolean  @default(true)
+  verificationStatus VerificationStatus @default(NONE)
+  verificationCardPath String?
+  verificationSelfiePath String?
+  verificationSubmittedAt DateTime?
+  verificationVerifiedAt DateTime?
+  verificationRejectedAt DateTime?
+  verificationRejectReason String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }

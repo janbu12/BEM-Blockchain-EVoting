@@ -44,6 +44,11 @@ contract MultiElectionVoting {
         _;
     }
 
+    modifier onlyAdminOrSigner() {
+        require(msg.sender == admin || msg.sender == signer, "Only admin or signer");
+        _;
+    }
+
     modifier onlySigner() {
         require(msg.sender == signer, "Only signer");
         _;
@@ -54,7 +59,7 @@ contract MultiElectionVoting {
         signer = msg.sender;
     }
 
-    function createElection(string calldata title) external onlyAdmin returns (uint256 electionId) {
+    function createElection(string calldata title) external onlyAdminOrSigner returns (uint256 electionId) {
         electionsCount += 1;
         electionId = electionsCount;
 
@@ -68,7 +73,7 @@ contract MultiElectionVoting {
         emit ElectionCreated(electionId, title);
     }
 
-    function addCandidate(uint256 electionId, string calldata name) external onlyAdmin {
+    function addCandidate(uint256 electionId, string calldata name) external onlyAdminOrSigner {
         require(electionId > 0 && electionId <= electionsCount, "Invalid election");
         require(!elections[electionId].isOpen, "Election already open");
 
@@ -85,14 +90,14 @@ contract MultiElectionVoting {
         emit CandidateAdded(electionId, candidateId, name);
     }
 
-    function openElection(uint256 electionId) external onlyAdmin {
+    function openElection(uint256 electionId) external onlyAdminOrSigner {
         require(electionId > 0 && electionId <= electionsCount, "Invalid election");
         require(elections[electionId].activeCandidatesCount > 0, "No candidates");
         elections[electionId].isOpen = true;
         emit ElectionStatusChanged(electionId, true);
     }
 
-    function closeElection(uint256 electionId) external onlyAdmin {
+    function closeElection(uint256 electionId) external onlyAdminOrSigner {
         require(electionId > 0 && electionId <= electionsCount, "Invalid election");
         elections[electionId].isOpen = false;
         emit ElectionStatusChanged(electionId, false);
@@ -109,7 +114,7 @@ contract MultiElectionVoting {
         return (candidateId, c.name, c.voteCount, c.isActive);
     }
 
-    function updateCandidate(uint256 electionId, uint256 candidateId, string calldata name) external onlyAdmin {
+    function updateCandidate(uint256 electionId, uint256 candidateId, string calldata name) external onlyAdminOrSigner {
         require(electionId > 0 && electionId <= electionsCount, "Invalid election");
         require(!elections[electionId].isOpen, "Election open");
         require(candidateId > 0 && candidateId <= elections[electionId].candidatesCount, "Invalid candidate");
@@ -120,7 +125,7 @@ contract MultiElectionVoting {
         emit CandidateUpdated(electionId, candidateId, name);
     }
 
-    function hideCandidate(uint256 electionId, uint256 candidateId) external onlyAdmin {
+    function hideCandidate(uint256 electionId, uint256 candidateId) external onlyAdminOrSigner {
         require(electionId > 0 && electionId <= electionsCount, "Invalid election");
         require(!elections[electionId].isOpen, "Election open");
         require(candidateId > 0 && candidateId <= elections[electionId].candidatesCount, "Invalid candidate");

@@ -25,7 +25,44 @@ export default function MahasiswaPage() {
   const studentMode =
     (process.env.NEXT_PUBLIC_STUDENT_MODE ?? "wallet").toLowerCase();
   const useWalletMode = studentMode !== "relayer";
+  const requireVerification =
+    (process.env.NEXT_PUBLIC_REQUIRE_STUDENT_VERIFICATION ?? "false").toLowerCase() ===
+    "true";
   const [activeElectionId, setActiveElectionId] = useState<bigint | null>(null);
+  const [verificationStatus, setVerificationStatus] = useState<
+    "NONE" | "PENDING" | "VERIFIED" | "REJECTED" | null
+  >(null);
+  const [verificationReason, setVerificationReason] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadMsg, setUploadMsg] = useState<string | null>(null);
+  const [cardFile, setCardFile] = useState<File | null>(null);
+  const [selfieFile, setSelfieFile] = useState<File | null>(null);
+
+  useEffect(() => {
+    if (!auth || !requireVerification) return;
+    let ignore = false;
+    fetch("http://localhost:4000/auth/verification/status", {
+      headers: {
+        Authorization: `Bearer ${auth.token}`,
+      },
+    })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then((result) => {
+        if (ignore) return;
+        if (result.ok) {
+          setVerificationStatus(result.data.verificationStatus);
+          setVerificationReason(result.data.verificationRejectReason ?? null);
+        } else {
+          setVerificationStatus("NONE");
+        }
+      })
+      .catch(() => {
+        if (!ignore) setVerificationStatus("NONE");
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [auth, requireVerification]);
 
   return (
     <div className="min-h-screen bg-slate-50 px-6 py-10">
@@ -146,6 +183,50 @@ export default function MahasiswaPage() {
           <p className="mt-4 text-sm text-slate-500">
             Hubungkan wallet untuk mulai voting.
           </p>
+        ) : requireVerification && verificationStatus !== "VERIFIED" ? (
+          <VerificationCard
+            status={verificationStatus}
+            reason={verificationReason}
+            uploading={uploading}
+            uploadMsg={uploadMsg}
+            onUpload={async () => {
+              if (!auth) return;
+              if (!cardFile || !selfieFile) {
+                setUploadMsg("Lengkapi foto kartu dan selfie.");
+                return;
+              }
+              setUploading(true);
+              setUploadMsg(null);
+              try {
+                const form = new FormData();
+                form.append("card", cardFile);
+                form.append("selfie", selfieFile);
+                const res = await fetch(
+                  "http://localhost:4000/auth/verification/upload",
+                  {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${auth.token}`,
+                    },
+                    body: form,
+                  }
+                );
+                const data = await res.json();
+                if (!res.ok) {
+                  setUploadMsg(data?.reason ?? "Gagal upload verifikasi");
+                  return;
+                }
+                setUploadMsg("Berhasil dikirim. Menunggu verifikasi admin.");
+                setVerificationStatus("PENDING");
+              } catch {
+                setUploadMsg("Gagal menghubungi backend");
+              } finally {
+                setUploading(false);
+              }
+            }}
+            onCardFileChange={setCardFile}
+            onSelfieFileChange={setSelfieFile}
+          />
         ) : (
           <div className="mt-6 space-y-4">
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
@@ -169,6 +250,78 @@ export default function MahasiswaPage() {
             )}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+function VerificationCard({
+  status,
+  reason,
+  uploading,
+  uploadMsg,
+  onUpload,
+  onCardFileChange,
+  onSelfieFileChange,
+}: {
+  status: "NONE" | "PENDING" | "VERIFIED" | "REJECTED" | null;
+  reason: string | null;
+  uploading: boolean;
+  uploadMsg: string | null;
+  onUpload: () => void;
+  onCardFileChange: (file: File | null) => void;
+  onSelfieFileChange: (file: File | null) => void;
+}) {
+  return (
+    <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
+      <h3 className="text-sm font-semibold text-slate-900">
+        Verifikasi Identitas Mahasiswa
+      </h3>
+      <p className="mt-2 text-xs text-slate-500">
+        Upload foto kartu mahasiswa dan selfie untuk verifikasi.
+      </p>
+
+      {status === "PENDING" && (
+        <p className="mt-3 text-xs text-amber-600">
+          Status: Menunggu verifikasi admin.
+        </p>
+      )}
+      {status === "REJECTED" && (
+        <p className="mt-3 text-xs text-rose-600">
+          Status: Ditolak. {reason ? `Alasan: ${reason}` : ""}
+        </p>
+      )}
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <label className="text-xs font-semibold text-slate-600">
+          Foto Kartu Mahasiswa
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => onCardFileChange(e.target.files?.[0] ?? null)}
+            className="mt-2 block w-full text-xs"
+          />
+        </label>
+        <label className="text-xs font-semibold text-slate-600">
+          Foto Selfie
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => onSelfieFileChange(e.target.files?.[0] ?? null)}
+            className="mt-2 block w-full text-xs"
+          />
+        </label>
+      </div>
+
+      <div className="mt-4 flex items-center gap-3">
+        <button
+          onClick={onUpload}
+          disabled={uploading}
+          className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+        >
+          {uploading ? "Mengirim..." : "Kirim Verifikasi"}
+        </button>
+        {uploadMsg && <p className="text-xs text-slate-500">{uploadMsg}</p>}
       </div>
     </div>
   );
