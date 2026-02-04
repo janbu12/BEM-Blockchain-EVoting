@@ -405,9 +405,77 @@ app.post("/auth/vote-relay", requireAuth, async (req: AuthRequest, res) => {
       functionName: "voteByRelayer",
       args: [electionId, candidateId, nimHash],
     });
+    await prisma.voteReceipt.upsert({
+      where: { studentId_electionId: { studentId: req.user!.id, electionId } },
+      update: { candidateId, txHash: hash, mode: "relayer" },
+      create: {
+        studentId: req.user!.id,
+        electionId,
+        candidateId,
+        txHash: hash,
+        mode: "relayer",
+      },
+    });
     return res.json({ ok: true, hash });
   } catch {
     return res.status(500).json({ ok: false, reason: "Gagal submit vote" });
+  }
+});
+
+app.post("/auth/vote-log", requireAuth, async (req: AuthRequest, res) => {
+  const electionIdRaw = req.body?.electionId;
+  const candidateIdRaw = req.body?.candidateId;
+  const txHash = String(req.body?.txHash ?? "").trim();
+  if (!electionIdRaw || !candidateIdRaw || !txHash) {
+    return res.status(400).json({ ok: false, reason: "Invalid payload" });
+  }
+  let electionId: bigint;
+  let candidateId: bigint;
+  try {
+    electionId = BigInt(electionIdRaw);
+    candidateId = BigInt(candidateIdRaw);
+  } catch {
+    return res.status(400).json({ ok: false, reason: "Invalid id" });
+  }
+  try {
+    await prisma.voteReceipt.upsert({
+      where: { studentId_electionId: { studentId: req.user!.id, electionId } },
+      update: { candidateId, txHash, mode: "wallet" },
+      create: {
+        studentId: req.user!.id,
+        electionId,
+        candidateId,
+        txHash,
+        mode: "wallet",
+      },
+    });
+    return res.json({ ok: true });
+  } catch {
+    return res.status(500).json({ ok: false, reason: "Gagal simpan riwayat" });
+  }
+});
+
+app.get("/auth/vote-history", requireAuth, async (req: AuthRequest, res) => {
+  try {
+    const items = await prisma.voteReceipt.findMany({
+      where: { studentId: req.user!.id },
+      orderBy: { createdAt: "desc" },
+      select: {
+        electionId: true,
+        candidateId: true,
+        txHash: true,
+        mode: true,
+        createdAt: true,
+      },
+    });
+    const normalized = items.map((item) => ({
+      ...item,
+      electionId: item.electionId.toString(),
+      candidateId: item.candidateId.toString(),
+    }));
+    return res.json({ ok: true, items: normalized });
+  } catch {
+    return res.status(500).json({ ok: false, reason: "Gagal memuat riwayat" });
   }
 });
 

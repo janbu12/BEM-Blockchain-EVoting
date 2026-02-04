@@ -26,6 +26,20 @@ model Student {
   verificationVerifiedAt DateTime?
   verificationRejectedAt DateTime?
   verificationRejectReason String?
+  voteReceipts       VoteReceipt[]
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+}
+
+model VoteReceipt {
+  id          Int      @id @default(autoincrement())
+  studentId   Int
+  student     Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  electionId  BigInt
+  candidateId BigInt
+  txHash      String
+  mode        String
+  createdAt   DateTime @default(now())
+
+  @@unique([studentId, electionId])
 }

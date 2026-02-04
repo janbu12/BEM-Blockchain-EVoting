@@ -239,6 +239,17 @@ function CandidateRow({
         formatTxToast("Voting berhasil", activeHash, voteReceipt?.blockNumber),
         "success"
       );
+      if (useWalletMode && activeHash) {
+        fetch("/api/student/vote-log", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            electionId: electionId.toString(),
+            candidateId: id.toString(),
+            txHash: activeHash,
+          }),
+        }).catch(() => {});
+      }
       onNimVoted();
     }
   }, [

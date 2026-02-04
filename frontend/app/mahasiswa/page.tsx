@@ -37,6 +37,18 @@ export default function MahasiswaPage() {
   const [uploadMsg, setUploadMsg] = useState<string | null>(null);
   const [cardFile, setCardFile] = useState<File | null>(null);
   const [selfieFile, setSelfieFile] = useState<File | null>(null);
+  const [cardPreview, setCardPreview] = useState<string | null>(null);
+  const [selfiePreview, setSelfiePreview] = useState<string | null>(null);
+  const [voteHistory, setVoteHistory] = useState<
+    {
+      electionId: string;
+      candidateId: string;
+      txHash: string;
+      mode: string;
+      createdAt: string;
+    }[]
+  >([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -87,6 +99,50 @@ export default function MahasiswaPage() {
       ignore = true;
     };
   }, [requireVerification]);
+
+  useEffect(() => {
+    let ignore = false;
+    setHistoryLoading(true);
+    fetch("/api/student/vote-history")
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then((result) => {
+        if (ignore) return;
+        if (result.ok) {
+          setVoteHistory(result.data.items ?? []);
+        } else {
+          setVoteHistory([]);
+        }
+      })
+      .catch(() => {
+        if (!ignore) setVoteHistory([]);
+      })
+      .finally(() => {
+        if (!ignore) setHistoryLoading(false);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!cardFile) {
+      setCardPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(cardFile);
+    setCardPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [cardFile]);
+
+  useEffect(() => {
+    if (!selfieFile) {
+      setSelfiePreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(selfieFile);
+    setSelfiePreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [selfieFile]);
 
   return (
     <div className="min-h-screen bg-slate-50 px-6 py-10">
@@ -180,6 +236,8 @@ export default function MahasiswaPage() {
             }}
             onCardFileChange={setCardFile}
             onSelfieFileChange={setSelfieFile}
+            cardPreview={cardPreview}
+            selfiePreview={selfiePreview}
           />
         ) : auth.mustChangePassword ? (
           <ChangePasswordCard
@@ -241,9 +299,11 @@ export default function MahasiswaPage() {
           </p>
         ) : (
           <div className="mt-6 space-y-4">
+            <VerificationStepper status={verificationStatus} />
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
               ✅ Login sebagai <span className="font-semibold">{auth.nim}</span>
             </div>
+            <VoteHistoryPanel items={voteHistory} loading={historyLoading} />
             {activeElectionId ? (
               <div className="space-y-4">
                 <button
@@ -264,6 +324,179 @@ export default function MahasiswaPage() {
   );
 }
 
+function VerificationStepper({
+  status,
+}: {
+  status: "NONE" | "PENDING" | "VERIFIED" | "REJECTED" | null;
+}) {
+  const steps = [
+    { key: "UPLOAD", label: "Upload" },
+    { key: "PENDING", label: "Pending" },
+    { key: "VERIFIED", label: "Verified" },
+  ];
+
+  const isPending = status === "PENDING";
+  const activeIndex =
+    status === "VERIFIED"
+      ? 2
+      : status === "PENDING"
+      ? 1
+      : 0;
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
+        Status Verifikasi
+      </p>
+      <div className="mt-4 flex items-center gap-3">
+        {steps.map((step, index) => {
+          const isActive = index <= activeIndex;
+          const isCurrent = index === activeIndex;
+          return (
+            <div key={step.key} className="flex items-center gap-3">
+              <div
+                className={`grid h-8 w-8 place-items-center rounded-full text-xs font-semibold ${
+                  isActive
+                    ? isPending && isCurrent
+                      ? "bg-amber-500 text-white"
+                      : "bg-emerald-600 text-white"
+                    : "bg-slate-200 text-slate-500"
+                }`}
+              >
+                {index + 1}
+              </div>
+              <div className="text-xs font-semibold text-slate-600">
+                {step.label}
+              </div>
+              {index < steps.length - 1 && (
+                <div
+                  className={`h-0.5 w-10 rounded-full ${
+                    index < activeIndex
+                      ? isPending
+                        ? "bg-amber-400"
+                        : "bg-emerald-500"
+                      : "bg-slate-200"
+                  }`}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {status === "REJECTED" && (
+        <p className="mt-3 text-xs text-rose-600">
+          Verifikasi ditolak. Upload ulang dengan data yang jelas.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function VoteHistoryPanel({
+  items,
+  loading,
+}: {
+  items: {
+    electionId: string;
+    candidateId: string;
+    txHash: string;
+    mode: string;
+    createdAt: string;
+  }[];
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+        Memuat riwayat voting...
+      </div>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-500">
+        Belum ada riwayat voting.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
+        Riwayat Voting
+      </p>
+      <div className="mt-4 space-y-3">
+        {items.map((item) => (
+          <VoteHistoryRow key={`${item.txHash}-${item.electionId}`} item={item} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function VoteHistoryRow({
+  item,
+}: {
+  item: {
+    electionId: string;
+    candidateId: string;
+    txHash: string;
+    mode: string;
+    createdAt: string;
+  };
+}) {
+  const explorerBase = process.env.NEXT_PUBLIC_BLOCK_EXPLORER_URL ?? "";
+  const electionId = BigInt(item.electionId);
+  const candidateId = BigInt(item.candidateId);
+  const { data: election } = useReadContract({
+    address: VOTING_ADDRESS,
+    abi: VOTING_ABI,
+    functionName: "elections",
+    args: [electionId],
+  });
+  const { data: candidate } = useReadContract({
+    address: VOTING_ADDRESS,
+    abi: VOTING_ABI,
+    functionName: "getCandidate",
+    args: [electionId, candidateId],
+  });
+
+  const title = election ? String(election[0]) : `Event #${item.electionId}`;
+  const candidateName = candidate ? String(candidate[1]) : `Kandidat #${item.candidateId}`;
+  const shortHash = `${item.txHash.slice(0, 6)}...${item.txHash.slice(-4)}`;
+  const explorerUrl =
+    explorerBase && item.txHash ? `${explorerBase}/tx/${item.txHash}` : null;
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+      <div>
+        <p className="text-sm font-semibold text-slate-900">{title}</p>
+        <p className="text-xs text-slate-500">
+          {candidateName} • {new Date(item.createdAt).toLocaleString("id-ID")}
+        </p>
+        <p className="mt-1 text-[10px] uppercase text-slate-400">
+          Mode: {item.mode}
+        </p>
+      </div>
+      <div className="text-right text-[11px] text-slate-500">
+        {explorerUrl ? (
+          <a
+            href={explorerUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="font-semibold text-slate-700 hover:text-slate-900"
+          >
+            Tx {shortHash}
+          </a>
+        ) : (
+          <>Tx {shortHash}</>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function VerificationCard({
   status,
   reason,
@@ -272,6 +505,8 @@ function VerificationCard({
   onUpload,
   onCardFileChange,
   onSelfieFileChange,
+  cardPreview,
+  selfiePreview,
 }: {
   status: "NONE" | "PENDING" | "VERIFIED" | "REJECTED" | null;
   reason: string | null;
@@ -280,58 +515,110 @@ function VerificationCard({
   onUpload: () => void;
   onCardFileChange: (file: File | null) => void;
   onSelfieFileChange: (file: File | null) => void;
+  cardPreview: string | null;
+  selfiePreview: string | null;
 }) {
   return (
     <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
-      <h3 className="text-sm font-semibold text-slate-900">
+      <VerificationStepper status={status} />
+      <h3 className="text-sm font-semibold text-slate-900 mt-2">
         Verifikasi Identitas Mahasiswa
       </h3>
       <p className="mt-2 text-xs text-slate-500">
-        Upload foto kartu mahasiswa dan selfie untuk verifikasi.
+        {status === "PENDING"
+          ? "Dokumen sedang ditinjau."
+          : "Upload foto kartu mahasiswa dan selfie untuk verifikasi."}
       </p>
 
-      {status === "PENDING" && (
-        <p className="mt-3 text-xs text-amber-600">
-          Status: Menunggu verifikasi admin.
-        </p>
-      )}
-      {status === "REJECTED" && (
-        <p className="mt-3 text-xs text-rose-600">
-          Status: Ditolak. {reason ? `Alasan: ${reason}` : ""}
-        </p>
-      )}
+      {status === "PENDING" ? (
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
+          Tunggu hingga admin mengonfirmasi verifikasi kamu.
+        </div>
+      ) : (
+        <>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-slate-700">
+                    Foto Kartu Mahasiswa
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    {cardPreview ? "Siap diunggah" : "Belum ada file"}
+                  </p>
+                </div>
+                <label className="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100">
+                  Pilih Foto
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => onCardFileChange(e.target.files?.[0] ?? null)}
+                    className="sr-only"
+                  />
+                </label>
+              </div>
+              <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                {cardPreview ? (
+                  <img
+                    src={cardPreview}
+                    alt="Preview kartu mahasiswa"
+                    className="h-40 w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-40 items-center justify-center text-xs text-slate-400">
+                    Preview kartu mahasiswa
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-slate-700">
+                    Foto Selfie
+                  </p>
+                  <p className="mt-1 text-[11px] text-slate-500">
+                    {selfiePreview ? "Siap diunggah" : "Belum ada file"}
+                  </p>
+                </div>
+                <label className="cursor-pointer rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-100">
+                  Pilih Foto
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => onSelfieFileChange(e.target.files?.[0] ?? null)}
+                    className="sr-only"
+                  />
+                </label>
+              </div>
+              <div className="mt-3 overflow-hidden rounded-lg border border-slate-200 bg-white">
+                {selfiePreview ? (
+                  <img
+                    src={selfiePreview}
+                    alt="Preview selfie"
+                    className="h-40 w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-40 items-center justify-center text-xs text-slate-400">
+                    Preview selfie
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <label className="text-xs font-semibold text-slate-600">
-          Foto Kartu Mahasiswa
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => onCardFileChange(e.target.files?.[0] ?? null)}
-            className="mt-2 block w-full text-xs"
-          />
-        </label>
-        <label className="text-xs font-semibold text-slate-600">
-          Foto Selfie
-          <input
-            type="file"
-            accept="image/*"
-            onChange={(e) => onSelfieFileChange(e.target.files?.[0] ?? null)}
-            className="mt-2 block w-full text-xs"
-          />
-        </label>
-      </div>
-
-      <div className="mt-4 flex items-center gap-3">
-        <button
-          onClick={onUpload}
-          disabled={uploading}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
-        >
-          {uploading ? "Mengirim..." : "Kirim Verifikasi"}
-        </button>
-        {uploadMsg && <p className="text-xs text-slate-500">{uploadMsg}</p>}
-      </div>
+          <div className="mt-4 flex items-center gap-3">
+            <button
+              onClick={onUpload}
+              disabled={uploading}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+            >
+              {uploading ? "Mengirim..." : "Kirim Verifikasi"}
+            </button>
+            {uploadMsg && <p className="text-xs text-slate-500">{uploadMsg}</p>}
+          </div>
+        </>
+      )}
     </div>
   );
 }
