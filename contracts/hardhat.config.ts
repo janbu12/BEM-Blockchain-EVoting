@@ -8,6 +8,7 @@ export default defineConfig({
     profiles: {
       default: {
         version: "0.8.28",
+        settings: { evmVersion: "london" },
       },
       production: {
         version: "0.8.28",
@@ -45,6 +46,13 @@ export default defineConfig({
       url: configVariable("POLYGON_AMOY_RPC_URL"),
       accounts: [configVariable("POLYGON_PRIVATE_KEY")],
       chainId: 80002,
+    },
+    besuLocal: {
+      type: "http",
+      chainType: "generic",
+      url: configVariable("BESU_RPC_URL"),
+      accounts: [configVariable("BESU_PRIVATE_KEY")],
+      chainId: 1337,
     },
     localhost: {
       type: "http",

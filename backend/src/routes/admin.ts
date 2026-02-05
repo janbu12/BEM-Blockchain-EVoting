@@ -370,6 +370,7 @@ router.post("/admin/elections/schedule", requireAdmin, async (req, res) => {
         functionName: "setElectionSchedule",
         args: [electionId, startTime, endTime],
       });
+      await publicClient.waitForTransactionReceipt({ hash: scheduleHash });
       const modeHash = await walletClient.writeContract({
         chain: null,
         address: VOTING_CONTRACT_ADDRESS as `0x${string}`,
@@ -377,6 +378,7 @@ router.post("/admin/elections/schedule", requireAdmin, async (req, res) => {
         functionName: "setElectionMode",
         args: [electionId, 1],
       });
+      await publicClient.waitForTransactionReceipt({ hash: modeHash });
       await logAdminAction(req, "election.schedule", {
         electionId: electionId.toString(),
         opensAt: opensAt.toISOString(),

@@ -1,18 +1,18 @@
-# Voting BEM DApp
+# Rancang Bangun E-Voting BEM pada Jaringan Blockchain Konsorsium Menggunakan Hyperledger Besu dan Mekanisme Relayer
 
-Aplikasi voting BEM berbasis blockchain dengan peran **Admin** dan **Mahasiswa**.  
+Aplikasi e-voting BEM berbasis blockchain dengan peran **Admin** dan **Mahasiswa**.
 Fokus utama: transparansi hasil, validasi identitas pemilih, dan jejak audit admin.
 
 ---
 
 ## Tipe Jaringan (Konsorsium/Permissioned)
 Aplikasi ini **dirancang sebagai sistem konsorsium/permissioned** untuk kebutuhan kampus.
-- Identitas pemilih diverifikasi off-chain (database kampus).
-- Voting dikirim melalui relayer backend (mahasiswa tidak wajib wallet).
+- Identitas pemilih diverifikasi **off-chain** (database kampus).
+- Voting dikirim melalui **relayer backend** (mahasiswa tidak wajib wallet).
 - Akses dan proses administrasi dikendalikan oleh admin kampus.
 
-Secara default proyek diuji di jaringan lokal (Hardhat).  
-Jaringan produksi ditentukan oleh `RPC_URL` dan alamat contract pada backend.
+Implementasi blockchain menggunakan **Hyperledger Besu (IBFT)** sebagai jaringan privat kampus.
+Secara default proyek juga bisa diuji di jaringan lokal (Hardhat).
 
 ---
 
@@ -20,6 +20,39 @@ Jaringan produksi ditentukan oleh `RPC_URL` dan alamat contract pada backend.
 - `contracts/` — smart contract (Hardhat) untuk multi-event voting.
 - `backend/` — Express + Prisma + PostgreSQL (auth mahasiswa, verifikasi identitas, relayer transaksi).
 - `frontend/` — Next.js + wagmi untuk UI admin/mahasiswa.
+
+---
+
+## Alur Data (End-to-End)
+**1) Autentikasi & sesi**
+- Mahasiswa login via backend (NIM + password) → backend buat session/token → frontend simpan session.
+- Admin/Superadmin login → backend verifikasi credential → token admin.
+
+**2) Verifikasi identitas mahasiswa**
+- Mahasiswa upload foto kartu & selfie → backend simpan file + status verifikasi `PENDING` di DB.
+- Admin review di `/admin/verifications` → backend update status (`VERIFIED/REJECTED`) + audit log.
+- Jika `VERIFIED`, mahasiswa boleh ganti password dan membuka akses menu lainnya.
+
+**3) Manajemen event & kandidat**
+- Admin membuat event/kandidat di UI → backend validasi → **tx on-chain** via relayer.
+- Backend menulis log aksi admin + snapshot tambahan di DB (untuk UI, audit, dan cache).
+
+**4) Penjadwalan & status event**
+- Admin set jadwal → backend kirim `setElectionSchedule` → tunggu mined → `setElectionMode`.
+- Status open/closed dibaca dari kontrak dan/atau sync backend (auto-close) → ditampilkan ke UI.
+
+**5) Voting (mode relayer)**
+- Mahasiswa pilih kandidat → frontend kirim request ke backend.
+- Backend hash NIM → kirim transaksi `voteByRelayer` ke kontrak.
+- Kontrak cek 1 NIM = 1 vote, simpan suara on-chain → backend simpan receipt/tx hash (opsional).
+
+**6) Hasil & publikasi**
+- Admin finalize/publish → backend ambil snapshot hasil dari on-chain → simpan ke DB.
+- Mahasiswa melihat hasil resmi via `/hasil`; progress publik opsional via `/progres`.
+
+**7) Audit & monitoring**
+- Setiap aksi admin dicatat di DB (audit log) → bisa diekspor / dilihat statistik harian.
+- Backend cek RPC/relayer status + saldo untuk monitoring.
 
 ---
 
@@ -31,6 +64,7 @@ Jaringan produksi ditentukan oleh `RPC_URL` dan alamat contract pada backend.
 - Audit log admin + ringkasan aktivitas.
 - Hasil pemilihan: finalize & publish, export CSV/XLSX.
 - Monitoring RPC/relayer + saldo signer.
+- **Superadmin**: kelola akun admin (tambah/aktif-nonaktif, reset password).
 
 **Mahasiswa**
 - Login NIM + password (wajib ganti password setelah diverifikasi).
@@ -47,49 +81,107 @@ Jaringan produksi ditentukan oleh `RPC_URL` dan alamat contract pada backend.
 - **Finalisasi & publikasi hasil**: snapshot hasil disimpan agar konsisten dan dapat diaudit.
 
 ### Teknologi Blockchain
-- **EVM Compatible**: Kontrak ditulis di Solidity dan kompatibel dengan Ethereum/Polygon/BNB Chain, dsb.
+- **Hyperledger Besu (IBFT)** untuk jaringan konsorsium.
+- **EVM Compatible**: kontrak ditulis di Solidity dan kompatibel dengan jaringan EVM privat.
 - **Hardhat** untuk pengembangan lokal dan scripting deployment.
-- **RPC Provider**: backend memakai `RPC_URL` untuk akses chain (lokal/testnet/mainnet).
-- **Wallet Relayer**: backend menggunakan private key signer untuk transaksi (write) ke contract.
+- **RPC Provider**: backend memakai `RPC_URL` untuk akses chain.
+- **Wallet Relayer**: backend memakai `SIGNER_PRIVATE_KEY` untuk transaksi write.
 - **Wagmi** di frontend untuk interaksi read (dan debug) ke chain.
-
-### Pilihan Network
-- **Hardhat local**: cepat dan tanpa biaya (default dev).
-- **Jaringan privat/konsorsium EVM**: disarankan untuk kampus.
-- **Testnet EVM**: opsional untuk simulasi publik.
-
----
-
-## Penjelasan Aplikasi (Detail)
-**Tujuan**  
-Memberikan sistem pemilihan BEM yang transparan namun tetap menjaga validasi identitas pemilih.  
-Blockchain dipakai untuk memastikan data pemilihan tidak dapat diubah dan hasil dapat diaudit.
-
-**Alur Mahasiswa**
-1) Login menggunakan NIM + password awal.
-2) Upload kartu mahasiswa & selfie untuk verifikasi identitas.
-3) Setelah diverifikasi admin → wajib ganti password.
-4) Masuk event aktif → pilih kandidat → voting.
-
-**Alur Admin**
-1) Login admin.
-2) Membuat event pemilihan + kandidat.
-3) Menjadwalkan event (mode production) atau manual (simulasi).
-4) Memverifikasi mahasiswa (approve/reject).
-5) Memantau progres dan menutup event.
-6) Finalisasi & publikasi hasil (opsional export CSV/XLSX).
-
-**Keamanan Data**
-- Identitas mahasiswa disimpan di database (Postgres) untuk proses verifikasi.
-- NIM hanya dipakai sebagai **hash** di blockchain untuk mencegah duplikasi vote.
-- Hasil akhir disimpan sebagai snapshot agar konsisten meski chain berubah.
 
 ---
 
 ## Prasyarat
 - Node.js
 - PostgreSQL
-- Hardhat (lokal) / RPC publik (testnet/mainnet)
+- Java 21 (untuk Besu)
+- Hyperledger Besu
+
+---
+
+## Setup Hyperledger Besu (IBFT) Lokal
+
+> Catatan: folder hasil generate **besu-network-gen** bersifat lokal (jangan masuk repo).
+
+### 1) Konfigurasi IBFT
+Template konfigurasi ada di `besu-network/ibftConfig.json`.
+Contoh pengaturan:
+- `chainId`: 1337
+- `blockperiodseconds`: 2-5
+- `validators`: jumlah node validator
+
+### 2) Generate genesis + key validator
+Jalankan (contoh Windows PowerShell):
+
+```powershell
+besu operator generate-blockchain-config `
+  --config-file="E:\Kuliah\Semester 7\Block Chain\voting-bem\besu-network\ibftConfig.json" `
+  --to="E:\Kuliah\Semester 7\Block Chain\voting-bem\besu-network-gen" `
+  --private-key-file-name=key
+```
+
+Output penting:
+- `besu-network-gen/genesis.json`
+- `besu-network-gen/keys/<address>/key` (private key validator)
+
+### 3) Buat key relayer (private key + address)
+Relayer adalah wallet backend untuk menandatangani transaksi. Buat key baru dengan Node:
+
+```powershell
+cd "E:\Kuliah\Semester 7\Block Chain\voting-bem\contracts"
+node -e "const { randomBytes } = require('crypto'); const { privateKeyToAccount } = require('viem/accounts'); const pk='0x'+randomBytes(32).toString('hex'); const acc=privateKeyToAccount(pk); console.log('PRIVATE_KEY=', pk); console.log('ADDRESS=', acc.address);"
+```
+
+Simpan:
+- `PRIVATE_KEY` → untuk `SIGNER_PRIVATE_KEY` (backend).
+- `ADDRESS` → dimasukkan ke `alloc` genesis.
+
+> Opsional: jika kontrak sudah ter-deploy, gunakan `setSigner(address)` oleh admin untuk mengganti signer ke address relayer baru.
+
+### 4) Tambahkan alloc untuk relayer/admin
+Edit `besu-network-gen/genesis.json` bagian `alloc` dengan address yang butuh saldo.
+Contoh:
+
+```json
+"alloc": {
+  "21d711fbf434f4366b842da1721af820ed07c633": { "balance": "1000000000000000000000000" },
+  "c4340660ac0a5cfaab744be93c97e6c47f608002": { "balance": "1000000000000000000000000" }
+}
+```
+
+Setelah edit genesis, **hapus** data lama agar perubahan berlaku:
+```
+E:\Kuliah\Semester 7\Block Chain\voting-bem\besu-network-gen\data
+```
+
+### 5) Jalankan node Besu
+```powershell
+besu `
+  --data-path="<directory-project>\besu-network-gen\data" `
+  --genesis-file="<directory-project>\besu-network-gen\genesis.json" `
+  --node-private-key-file="<directory-project>\besu-network-gen\keys\<validator_address>\key" `
+  --rpc-http-enabled `
+  --rpc-http-api=ETH,NET,WEB3,IBFT `
+  --rpc-http-host=127.0.0.1 `
+  --rpc-http-port=8545 `
+  --host-allowlist="*" `
+  --rpc-http-cors-origins="*" `
+  --sync-mode=FULL `
+  --sync-min-peers=0 `
+  --min-gas-price=0
+```
+
+Cek status:
+```powershell
+curl -X POST http://127.0.0.1:8545 `
+  -H "Content-Type: application/json" `
+  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"eth_blockNumber\",\"params\":[]}"
+```
+
+### 6) (Opsional) Tambah network di MetaMask
+- Network Name: `Besu Local`
+- RPC URL: `http://127.0.0.1:8545`
+- Chain ID: `1337`
+- Currency: `ETH`
 
 ---
 
@@ -113,7 +205,7 @@ Catatan: script deploy menulis alamat contract ke env frontend dan menjalankan s
    - `JWT_SECRET`
    - `ADMIN_JWT_SECRET`
    - `ADMIN_USERNAME` / `ADMIN_PASSWORD`
-   - `SUPERADMIN_USERNAME` / `SUPERADMIN_PASSWORD`
+   - `SUPERADMIN_USERNAME` / `SUPERADMIN_PASSWORD` (untuk kelola akun admin)
    - `SIGNER_PRIVATE_KEY` (wallet relayer)
    - `VOTING_CONTRACT_ADDRESS`
    - `RPC_URL`
@@ -147,16 +239,16 @@ Catatan: script deploy menulis alamat contract ke env frontend dan menjalankan s
 - Kelola event & kandidat di `/admin`.
 - Verifikasi mahasiswa di `/admin/verifications`.
 - Finalisasi & publish hasil di `/admin/history`.
+- **Superadmin**: kelola akun admin di menu **Admin** (mis. `/admin/users`).
 
 **Mahasiswa**
 - Login NIM + password.
 - Upload kartu & selfie untuk verifikasi.
 - Setelah diverifikasi, ganti password.
 - Masuk event aktif dan lakukan voting.
-
 ---
 
 ## Troubleshooting
-- Pastikan `SIGNER_PRIVATE_KEY` & `VOTING_CONTRACT_ADDRESS` terisi valid.
+- Pastikan `SIGNER_PRIVATE_KEY` & `VOTING_CONTRACT_ADDRESS` valid.
 - Jika ABI berubah, jalankan `contracts/scripts/sync-abi.mjs`.
 - Reset seed mahasiswa mengembalikan password ke `mahasiswa123`.
