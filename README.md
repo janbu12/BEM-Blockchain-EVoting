@@ -124,9 +124,9 @@ Secara default proyek juga bisa diuji di jaringan lokal (Hardhat).
 ### 1) Konfigurasi IBFT
 Template konfigurasi ada di `besu-network/ibftConfig.json`.
 Contoh pengaturan:
-- `chainId`: 1337
+- `chainId`: 1337 (atau 7777, **harus konsisten** di backend/frontend/Metamask)
 - `blockperiodseconds`: 2-5
-- `validators`: jumlah node validator
+- `validators`: jumlah node validator (contoh ideal: **4 validator**)
 
 ### 2) Generate genesis + key validator
 Jalankan (contoh Windows PowerShell):
@@ -134,13 +134,13 @@ Jalankan (contoh Windows PowerShell):
 ```powershell
 besu operator generate-blockchain-config `
   --config-file="E:\Kuliah\Semester 7\Block Chain\voting-bem\besu-network\ibftConfig.json" `
-  --to="E:\Kuliah\Semester 7\Block Chain\voting-bem\besu-network-gen" `
+  --to="E:\Kuliah\Semester 7\Block Chain\voting-bem\besu-network-gen-4" `
   --private-key-file-name=key
 ```
 
 Output penting:
-- `besu-network-gen/genesis.json`
-- `besu-network-gen/keys/<address>/key` (private key validator)
+- `besu-network-gen-4/genesis.json`
+- `besu-network-gen-4/keys/<address>/key` (private key validator)
 
 ### 3) Buat key relayer (private key + address)
 Relayer adalah wallet backend untuk menandatangani transaksi. Buat key baru dengan Node:
@@ -157,7 +157,7 @@ Simpan:
 > Opsional: jika kontrak sudah ter-deploy, gunakan `setSigner(address)` oleh admin untuk mengganti signer ke address relayer baru.
 
 ### 4) Tambahkan alloc untuk relayer/admin
-Edit `besu-network-gen/genesis.json` bagian `alloc` dengan address yang butuh saldo.
+Edit `besu-network-gen-4/genesis.json` bagian `alloc` dengan address yang butuh saldo.
 Contoh:
 
 ```json
@@ -169,25 +169,39 @@ Contoh:
 
 Setelah edit genesis, **hapus** data lama agar perubahan berlaku:
 ```
-E:\Kuliah\Semester 7\Block Chain\voting-bem\besu-network-gen\data
+E:\Kuliah\Semester 7\Block Chain\voting-bem\besu-network-gen-4\data
 ```
 
-### 5) Jalankan node Besu
+### 5) Jalankan 4 Validator + 1 RPC (Arsitektur Ideal)
+Struktur ideal: **4 validator (konsensus IBFT)** + **1 RPC node (non-validator)**.
+Gunakan skrip yang sudah disediakan di `besu-network/`.
+
+**Langkah A — Jalankan validator #1 untuk dapat enode**
 ```powershell
-besu `
-  --data-path="<directory-project>\besu-network-gen\data" `
-  --genesis-file="<directory-project>\besu-network-gen\genesis.json" `
-  --node-private-key-file="<directory-project>\besu-network-gen\keys\<validator_address>\key" `
-  --rpc-http-enabled `
-  --rpc-http-api=ETH,NET,WEB3,IBFT `
-  --rpc-http-host=127.0.0.1 `
-  --rpc-http-port=8545 `
-  --host-allowlist="*" `
-  --rpc-http-cors-origins="*" `
-  --sync-mode=FULL `
-  --sync-min-peers=0 `
+besu --data-path="<project>\besu-network-gen-4\data\val1" `
+  --genesis-file="<project>\besu-network-gen-4\genesis.json" `
+  --node-private-key-file="<project>\besu-network-gen-4\keys\<validator1_address>\key" `
+  --p2p-port=30303 `
+  --rpc-http-enabled=false `
   --min-gas-price=0
 ```
+Catat `Enode URL` di log, lalu isi ke `besu-network/static-nodes.json`.
+
+**Langkah B — Jalankan 4 validator otomatis**
+```powershell
+.\besu-network\start-validators.ps1
+```
+Jika validator #1 sudah running manual, gunakan:
+```powershell
+.\besu-network\start-validators.ps1 -SkipVal1
+```
+
+**Langkah C — Jalankan RPC node (non-validator)**
+```powershell
+.\besu-network\start-rpc.ps1
+```
+
+RPC node akan berjalan di `http://127.0.0.1:8545`.
 
 Cek status:
 ```powershell

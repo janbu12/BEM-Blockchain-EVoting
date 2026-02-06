@@ -1,4 +1,4 @@
-besu-network-gen/
+besu-network-gen-4/
 *.key
 .env
 .env.*
