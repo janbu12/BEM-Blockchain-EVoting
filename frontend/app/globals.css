@@ -2,10 +2,31 @@
 
 :root {
   color-scheme: light;
+  weight: 400;
 }
 
 body {
   min-height: 100vh;
   background: #f6f7fb;
+  font-family: var(--font-app-ui);
   color: #0f172a;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.font-heading,
+.uppercase {
+  font-family: var(--font-app-heading);
+}
+
+button,
+input,
+select,
+textarea,
+.font-ui {
+  font-family: var(--font-app-ui);
 }

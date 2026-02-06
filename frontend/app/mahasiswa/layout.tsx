@@ -90,7 +90,7 @@ function StudentLayoutContent({ children }: { children: React.ReactNode }) {
               Mahasiswa
             </p>
             <h1 className="mt-2 text-base font-semibold text-slate-900">
-              Voting BEM
+              VOTERA
             </h1>
             <p className="mt-1 text-sm text-slate-500">{headerMessage}</p>
           </div>
@@ -191,7 +191,7 @@ function StudentLayoutContent({ children }: { children: React.ReactNode }) {
                   Mahasiswa
                 </p>
                 <h2 className="mt-2 text-lg font-semibold text-slate-900">
-                  Voting BEM
+                  VOTERA
                 </h2>
                 <p className="mt-1 text-xs text-slate-500">
                   Menu mahasiswa untuk akses cepat.

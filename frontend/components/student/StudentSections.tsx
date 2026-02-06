@@ -187,28 +187,34 @@ export function NoticeCard({ text }: { text: string }) {
 export function ActiveEventSummary({ onGoVote }: { onGoVote: () => void }) {
   const [count, setCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const pollIntervalMs = 10000;
 
   useEffect(() => {
     let ignore = false;
-    setLoading(true);
-    fetch("/api/public/progress")
-      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
-      .then((result) => {
-        if (ignore) return;
-        if (result.ok) {
-          setCount((result.data.items ?? []).length);
-        } else {
-          setCount(0);
-        }
-      })
-      .catch(() => {
-        if (!ignore) setCount(0);
-      })
-      .finally(() => {
-        if (!ignore) setLoading(false);
-      });
+    const fetchStatus = () => {
+      setLoading(true);
+      fetch("/api/public/progress")
+        .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+        .then((result) => {
+          if (ignore) return;
+          if (result.ok) {
+            setCount((result.data.items ?? []).length);
+          } else {
+            setCount(0);
+          }
+        })
+        .catch(() => {
+          if (!ignore) setCount(0);
+        })
+        .finally(() => {
+          if (!ignore) setLoading(false);
+        });
+    };
+    fetchStatus();
+    const id = window.setInterval(fetchStatus, pollIntervalMs);
     return () => {
       ignore = true;
+      window.clearInterval(id);
     };
   }, []);
 
@@ -266,6 +272,7 @@ export function OpenElections({ onSelect }: { onSelect: (id: bigint) => void }) 
     address: VOTING_ADDRESS,
     abi: VOTING_ABI,
     functionName: "electionsCount",
+    query: { refetchInterval: 10000 },
   });
 
   const electionIds = useMemo(() => {
@@ -307,32 +314,37 @@ function OpenElectionCard({
   });
   const [nimVoted, setNimVoted] = useState(false);
   const [checkingVote, setCheckingVote] = useState(false);
+  const pollIntervalMs = 5000;
 
   useEffect(() => {
     let ignore = false;
-    setCheckingVote(true);
-    fetch("/api/student/vote-status", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ electionId: electionId.toString() }),
-    })
-      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
-      .then((result) => {
-        if (ignore) return;
-        if (result.ok && result.data?.alreadyVoted === true) {
-          setNimVoted(true);
-        } else if (result.ok) {
-          setNimVoted(false);
-        }
+    const fetchVoteStatus = () => {
+      setCheckingVote(true);
+      fetch("/api/student/vote-status", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ electionId: electionId.toString() }),
       })
-      .finally(() => {
-        if (!ignore) setCheckingVote(false);
-      });
-
+        .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+        .then((result) => {
+          if (ignore) return;
+          if (result.ok && result.data?.alreadyVoted === true) {
+            setNimVoted(true);
+          } else if (result.ok) {
+            setNimVoted(false);
+          }
+        })
+        .finally(() => {
+          if (!ignore) setCheckingVote(false);
+        });
+    };
+    fetchVoteStatus();
+    const id = window.setInterval(fetchVoteStatus, pollIntervalMs);
     return () => {
       ignore = true;
+      window.clearInterval(id);
     };
   }, [electionId]);
 

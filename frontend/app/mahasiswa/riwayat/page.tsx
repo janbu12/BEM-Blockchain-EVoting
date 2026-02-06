@@ -1,10 +1,20 @@
 "use client";
 
+import { useEffect } from "react";
 import { VoteHistoryPanel } from "@/components/student/StudentSections";
 import { useStudent } from "@/components/student/StudentProvider";
 
 export default function StudentHistoryPage() {
-  const { voteHistory, voteHistoryLoading } = useStudent();
+  const { voteHistory, voteHistoryLoading, refreshVoteHistory } = useStudent();
+  const pollIntervalMs = 15000;
+
+  useEffect(() => {
+    refreshVoteHistory();
+    const id = window.setInterval(() => {
+      refreshVoteHistory();
+    }, pollIntervalMs);
+    return () => window.clearInterval(id);
+  }, [refreshVoteHistory]);
 
   return (
     <div className="space-y-6">

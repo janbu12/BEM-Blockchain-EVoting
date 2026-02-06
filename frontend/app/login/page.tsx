@@ -11,7 +11,7 @@ export default function LoginPage() {
       <div className="mx-auto max-w-5xl">
         <header className="mb-10 text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-400">
-            Voting BEM
+            VOTERA
           </p>
           <h1 className="mt-3 text-3xl font-semibold text-slate-900 sm:text-4xl">
             Masuk ke Sistem Pemilihan

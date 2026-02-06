@@ -443,6 +443,10 @@ export function CandidateAdminRow({
           setIsProfileSaving(false);
           if (profileResult) {
             push("Profil kandidat disimpan", "success");
+            if (!trimmedName || trimmedName === name) {
+              setIsEditOpen(false);
+              return;
+            }
           }
 
           if (trimmedName && trimmedName !== name) {

@@ -115,7 +115,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               Admin Suite
             </p>
             <h1 className="mt-1 text-base font-semibold text-slate-900">
-              Voting BEM
+              VOTERA
             </h1>
           </div>
           <div className="flex items-center gap-2">
@@ -143,7 +143,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 Admin Suite
               </p>
               <h1 className="mt-2 text-xl font-semibold text-slate-900">
-                Voting BEM
+                VOTERA
               </h1>
               <p className="mt-1 text-xs text-slate-500">
                 Kendali penuh, audit jelas.
@@ -313,7 +313,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                   Admin Suite
                 </p>
                 <h2 className="mt-2 text-lg font-semibold text-slate-900">
-                  Voting BEM
+                  VOTERA
                 </h2>
                 <p className="mt-1 text-xs text-slate-500">
                   Kendali penuh, audit jelas.

@@ -120,8 +120,10 @@ export function AdminActions({
       setTimeout(() => {
         setTitle("");
       }, 0);
+      onCloseCreate();
+      setCreateRelayHash(null);
     }
-  }, [isCreateSuccess, queryClient, push]);
+  }, [activeCreateHash, createReceipt?.blockNumber, isCreateSuccess, onCloseCreate, queryClient, push]);
 
   useEffect(() => {
     if (isStatusSuccess && statusElectionId) {
@@ -392,7 +394,7 @@ export function AdminActions({
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Contoh: Pemilihan BEM 2024"
+              placeholder="Contoh: Pemilihan Ormawa 2024"
               className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm outline-none focus:border-slate-400"
             />
           </label>

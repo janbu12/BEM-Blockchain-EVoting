@@ -51,7 +51,7 @@ export function StudentShell({
           <p className="text-[10px] font-semibold uppercase tracking-[0.4em] text-slate-400">
             Mahasiswa
           </p>
-          <h2 className="mt-2 text-lg font-semibold text-slate-900">Voting BEM</h2>
+          <h2 className="mt-2 text-lg font-semibold text-slate-900">VOTERA</h2>
           <p className="mt-1 text-xs text-slate-500">
             Akses voting, riwayat, dan hasil.
           </p>

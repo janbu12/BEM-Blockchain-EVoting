@@ -1,7 +1,16 @@
-# Rancang Bangun E-Voting BEM pada Jaringan Blockchain Konsorsium Menggunakan Hyperledger Besu dan Mekanisme Relayer
+# Rancang Bangun E‑Voting Organisasi Kemahasiswaan pada Jaringan Blockchain Konsorsium Menggunakan Hyperledger Besu dan Mekanisme Relayer
 
-Aplikasi e-voting BEM berbasis blockchain dengan peran **Admin** dan **Mahasiswa**.
+**Votera** adalah aplikasi e‑voting organisasi kemahasiswaan berbasis blockchain dengan peran **Admin** dan **Mahasiswa**.
 Fokus utama: transparansi hasil, validasi identitas pemilih, dan jejak audit admin.
+Implementasi ini dapat diterapkan untuk BEM, HIMA, atau organisasi kampus lainnya.
+
+---
+
+## Nama Aplikasi: VOTERA
+**VOTERA** dipilih sebagai nama aplikasi karena:
+- Berasal dari kata **Vote** + **Era**, menekankan pergeseran ke voting digital yang modern.
+- Netral dan bisa dipakai untuk berbagai organisasi kemahasiswaan (tidak terbatas BEM).
+- Mudah diingat, singkat, dan cocok untuk branding aplikasi kampus.
 
 ---
 
@@ -71,6 +80,16 @@ Secara default proyek juga bisa diuji di jaringan lokal (Hardhat).
 - Upload kartu mahasiswa & selfie untuk verifikasi.
 - Voting tanpa Metamask (mode relayer).
 - Riwayat voting + status tx hash (jika tersedia).
+
+---
+
+## Pembaruan Fitur (Highlight)
+- **Polling realtime** untuk status voting, jadwal event, riwayat, hasil, dan progress.
+- **Perbandingan kandidat (Versus)** di halaman mahasiswa (profil lengkap tanpa suara).
+- **Hasil resmi** dengan kartu kandidat berfoto + chart persebaran suara.
+- **Progress publik anonim** (tanpa identitas pemilih).
+- **Toast & modal UX** ditingkatkan (toast selalu di atas modal, modal auto-close saat sukses).
+- **Superadmin** untuk manajemen akun admin + audit log ringkas.
 
 ---
 

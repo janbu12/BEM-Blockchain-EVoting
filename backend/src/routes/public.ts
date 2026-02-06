@@ -3,6 +3,7 @@ import { prisma } from "../db";
 import { VOTING_CONTRACT_ADDRESS } from "../config";
 import { VOTING_ADMIN_ABI } from "../abi";
 import { publicClient } from "../blockchain";
+import { toPublicPath } from "../uploads";
 
 const router = express.Router();
 
@@ -14,14 +15,39 @@ router.get("/public/results", async (_req, res) => {
     });
     return res.json({
       ok: true,
-      items: results.map((result) => ({
-        electionId: result.electionId.toString(),
-        title: result.title,
-        totalVotes: result.totalVotes,
-        snapshotAt: result.snapshotAt.toISOString(),
-        publishedAt: result.publishedAt ? result.publishedAt.toISOString() : null,
-        results: result.results,
-      })),
+      items: await Promise.all(
+        results.map(async (result) => {
+          const profiles = await prisma.candidateProfile.findMany({
+            where: { electionId: result.electionId },
+          });
+          const photoMap = new Map(
+            profiles
+              .filter((profile) => profile.photoPath)
+              .map((profile) => [
+                profile.candidateId.toString(),
+                toPublicPath(profile.photoPath as string),
+              ])
+          );
+          const payload = result.results as {
+            candidates?: Array<{ id: string; name?: string; voteCount?: number }>;
+          };
+          const candidates = (payload?.candidates ?? []).map((candidate) => ({
+            ...candidate,
+            photoUrl: photoMap.get(String(candidate.id)) ?? null,
+          }));
+          return {
+            electionId: result.electionId.toString(),
+            title: result.title,
+            totalVotes: result.totalVotes,
+            snapshotAt: result.snapshotAt.toISOString(),
+            publishedAt: result.publishedAt ? result.publishedAt.toISOString() : null,
+            results: {
+              ...(payload ?? {}),
+              candidates,
+            },
+          };
+        })
+      ),
     });
   } catch (err) {
     console.error("public results failed", err);
@@ -38,6 +64,24 @@ router.get("/public/results/:electionId", async (req, res) => {
     if (!result) {
       return res.status(404).json({ ok: false, reason: "Hasil tidak ditemukan" });
     }
+    const profiles = await prisma.candidateProfile.findMany({
+      where: { electionId },
+    });
+    const photoMap = new Map(
+      profiles
+        .filter((profile) => profile.photoPath)
+        .map((profile) => [
+          profile.candidateId.toString(),
+          toPublicPath(profile.photoPath as string),
+        ])
+    );
+    const payload = result.results as {
+      candidates?: Array<{ id: string; name?: string; voteCount?: number }>;
+    };
+    const candidates = (payload?.candidates ?? []).map((candidate) => ({
+      ...candidate,
+      photoUrl: photoMap.get(String(candidate.id)) ?? null,
+    }));
     return res.json({
       ok: true,
       result: {
@@ -46,7 +90,10 @@ router.get("/public/results/:electionId", async (req, res) => {
         totalVotes: result.totalVotes,
         snapshotAt: result.snapshotAt.toISOString(),
         publishedAt: result.publishedAt ? result.publishedAt.toISOString() : null,
-        results: result.results,
+        results: {
+          ...(payload ?? {}),
+          candidates,
+        },
       },
     });
   } catch (err) {

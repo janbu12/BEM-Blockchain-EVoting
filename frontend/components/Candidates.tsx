@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { readContractQueryKey } from "@wagmi/core/query";
 import {
@@ -93,56 +93,101 @@ function ElectionCandidates({ electionId }: { electionId: bigint }) {
     isOpen?: boolean;
   } | null>(null);
   const [scheduleLoading, setScheduleLoading] = useState(false);
+  const pollIntervalMs = 5000;
+  const backendBase = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:4000";
+
+  type CandidateInfo = {
+    id: string;
+    name: string;
+    photoUrl?: string | null;
+  };
+  const [candidateMap, setCandidateMap] = useState<Record<string, CandidateInfo>>({});
+  const [isCompareOpen, setIsCompareOpen] = useState(false);
+  const [compareA, setCompareA] = useState("");
+  const [compareB, setCompareB] = useState("");
+  const [compareLoading, setCompareLoading] = useState(false);
+  const [compareError, setCompareError] = useState<string | null>(null);
+  const [compareProfiles, setCompareProfiles] = useState<{
+    a: CandidateInfo & {
+      profile: {
+        tagline: string | null;
+        about: string | null;
+        visi: string | null;
+        misi: string | null;
+        programKerja: string | null;
+        photoUrl?: string | null;
+      } | null;
+    };
+    b: CandidateInfo & {
+      profile: {
+        tagline: string | null;
+        about: string | null;
+        visi: string | null;
+        misi: string | null;
+        programKerja: string | null;
+        photoUrl?: string | null;
+      } | null;
+    };
+  } | null>(null);
 
   useEffect(() => {
     let ignore = false;
-    setCheckingNimVote(true);
-    fetch("/api/student/vote-status", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ electionId: electionId.toString() }),
-    })
-      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
-      .then((result) => {
-        if (ignore) return;
-        if (result.ok && result.data?.alreadyVoted === true) {
-          setNimVoted(true);
-        } else if (result.ok) {
-          setNimVoted(false);
-        }
+    const fetchVoteStatus = () => {
+      setCheckingNimVote(true);
+      fetch("/api/student/vote-status", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ electionId: electionId.toString() }),
       })
-      .finally(() => {
-        if (!ignore) setCheckingNimVote(false);
-      });
-
+        .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+        .then((result) => {
+          if (ignore) return;
+          if (result.ok && result.data?.alreadyVoted === true) {
+            setNimVoted(true);
+          } else if (result.ok) {
+            setNimVoted(false);
+          }
+        })
+        .finally(() => {
+          if (!ignore) setCheckingNimVote(false);
+        });
+    };
+    fetchVoteStatus();
+    const id = window.setInterval(fetchVoteStatus, pollIntervalMs);
     return () => {
       ignore = true;
+      window.clearInterval(id);
     };
   }, [electionId]);
 
   useEffect(() => {
     let ignore = false;
-    setScheduleLoading(true);
-    fetch(`/api/student/elections/schedule/${electionId.toString()}`)
-      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
-      .then((result) => {
-        if (ignore) return;
-        if (result.ok) {
-          setSchedule(result.data?.schedule ?? null);
-        } else {
-          setSchedule(null);
-        }
-      })
-      .catch(() => {
-        if (!ignore) setSchedule(null);
-      })
-      .finally(() => {
-        if (!ignore) setScheduleLoading(false);
-      });
+    const fetchSchedule = () => {
+      setScheduleLoading(true);
+      fetch(`/api/student/elections/schedule/${electionId.toString()}`)
+        .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+        .then((result) => {
+          if (ignore) return;
+          if (result.ok) {
+            setSchedule(result.data?.schedule ?? null);
+          } else {
+            setSchedule(null);
+          }
+        })
+        .catch(() => {
+          if (!ignore) setSchedule(null);
+        })
+        .finally(() => {
+          if (!ignore) setScheduleLoading(false);
+        });
+    };
+    fetchSchedule();
+    const id = window.setInterval(fetchSchedule, pollIntervalMs);
     return () => {
       ignore = true;
+      window.clearInterval(id);
     };
   }, [electionId]);
 
@@ -167,6 +212,78 @@ function ElectionCandidates({ electionId }: { electionId: bigint }) {
   const opensAt = schedule?.opensAt ? new Date(schedule.opensAt) : null;
   const closesAt = schedule?.closesAt ? new Date(schedule.closesAt) : null;
   const countdownText = formatCountdown(now, opensAt, closesAt);
+  const candidateList = useMemo(() => {
+    return Object.values(candidateMap).sort((a, b) => Number(a.id) - Number(b.id));
+  }, [candidateMap]);
+
+  const updateCandidateInfo = useCallback((info: CandidateInfo | null) => {
+    setCandidateMap((prev) => {
+      if (!info) return prev;
+      const existing = prev[info.id];
+      if (
+        existing &&
+        existing.name === info.name &&
+        (existing.photoUrl ?? null) === (info.photoUrl ?? null)
+      ) {
+        return prev;
+      }
+      return { ...prev, [info.id]: info };
+    });
+  }, []);
+
+  const resolvePhoto = useCallback(
+    (raw?: string | null) => {
+      if (!raw) return null;
+      return raw.startsWith("/") ? `${backendBase}${raw}` : raw;
+    },
+    [backendBase]
+  );
+
+  const fetchProfile = useCallback(
+    async (candidateId: string) => {
+      const res = await fetch(
+        `/api/student/candidates/${electionId.toString()}/${candidateId}`
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.reason ?? "Gagal memuat profil kandidat");
+      }
+      const profile = data?.profile ?? null;
+      if (profile?.photoUrl) {
+        profile.photoUrl = resolvePhoto(profile.photoUrl);
+      }
+      return profile;
+    },
+    [electionId, resolvePhoto]
+  );
+
+  const handleCompare = useCallback(async () => {
+    if (!compareA || !compareB || compareA === compareB) return;
+    setCompareLoading(true);
+    setCompareError(null);
+    setCompareProfiles(null);
+    try {
+      const [profileA, profileB] = await Promise.all([
+        fetchProfile(compareA),
+        fetchProfile(compareB),
+      ]);
+      const infoA = candidateMap[compareA];
+      const infoB = candidateMap[compareB];
+      if (!infoA || !infoB) {
+        throw new Error("Kandidat tidak ditemukan");
+      }
+      setCompareProfiles({
+        a: { ...infoA, profile: profileA },
+        b: { ...infoB, profile: profileB },
+      });
+    } catch (err) {
+      setCompareError(
+        err instanceof Error ? err.message : "Gagal memuat profil kandidat"
+      );
+    } finally {
+      setCompareLoading(false);
+    }
+  }, [candidateMap, compareA, compareB, fetchProfile]);
 
   return (
     <div className="mt-6">
@@ -199,6 +316,24 @@ function ElectionCandidates({ electionId }: { electionId: bigint }) {
           <span>Jadwal belum diatur</span>
         )}
       </div>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => {
+            setCompareError(null);
+            setCompareProfiles(null);
+            setIsCompareOpen(true);
+          }}
+          disabled={candidateList.length < 2}
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 disabled:cursor-not-allowed disabled:text-slate-400"
+        >
+          Bandingkan Kandidat
+        </button>
+        {candidateList.length < 2 && (
+          <span className="text-xs text-slate-400">
+            Minimal 2 kandidat untuk perbandingan.
+          </span>
+        )}
+      </div>
       {candidatesCount === BigInt(0) ? (
         <p className="mt-3 text-sm text-slate-500">
           Belum ada kandidat untuk event ini.
@@ -213,6 +348,7 @@ function ElectionCandidates({ electionId }: { electionId: bigint }) {
               isOpen={isOpen}
               nimAlreadyVoted={nimVoted}
               onNimVoted={() => setNimVoted(true)}
+              onCandidateInfo={updateCandidateInfo}
             />
           ))}
         </ul>
@@ -220,6 +356,139 @@ function ElectionCandidates({ electionId }: { electionId: bigint }) {
       {checkingNimVote && (
         <p className="mt-2 text-xs text-slate-400">Memeriksa status voting...</p>
       )}
+
+      <Modal
+        open={isCompareOpen}
+        title="Bandingkan Kandidat"
+        description="Pilih dua kandidat untuk dibandingkan."
+        onClose={() => setIsCompareOpen(false)}
+        widthClassName="max-w-4xl"
+      >
+        <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-xs font-semibold text-slate-500">
+              Kandidat A
+              <select
+                value={compareA}
+                onChange={(e) => setCompareA(e.target.value)}
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm outline-none focus:border-slate-400"
+              >
+                <option value="">Pilih kandidat</option>
+                {candidateList.map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    {candidate.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs font-semibold text-slate-500">
+              Kandidat B
+              <select
+                value={compareB}
+                onChange={(e) => setCompareB(e.target.value)}
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm outline-none focus:border-slate-400"
+              >
+                <option value="">Pilih kandidat</option>
+                {candidateList.map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    {candidate.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          {compareA && compareB && compareA === compareB && (
+            <p className="text-xs text-rose-600">
+              Kandidat yang dipilih harus berbeda.
+            </p>
+          )}
+          {compareError && <p className="text-xs text-rose-600">{compareError}</p>}
+
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              onClick={() => setIsCompareOpen(false)}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+            >
+              Tutup
+            </button>
+            <button
+              onClick={handleCompare}
+              disabled={!compareA || !compareB || compareA === compareB || compareLoading}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+            >
+              {compareLoading ? "Memuat..." : "Bandingkan"}
+            </button>
+          </div>
+
+          {compareProfiles && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {[compareProfiles.a, compareProfiles.b].map((candidate) => (
+                <div
+                  key={candidate.id}
+                  className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="h-28 w-24 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                      {resolvePhoto(candidate.profile?.photoUrl ?? candidate.photoUrl) ? (
+                        <img
+                          src={resolvePhoto(candidate.profile?.photoUrl ?? candidate.photoUrl) ?? undefined}
+                          alt={`Foto ${candidate.name}`}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[10px] text-slate-400">
+                          Foto
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {candidate.name}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Ringkasan profil kandidat.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-4 space-y-3 text-xs text-slate-600">
+                    <div className="rounded-lg border border-slate-200 bg-white p-3">
+                      <p className="font-semibold text-slate-700">Tagline</p>
+                      <p className="mt-1 whitespace-pre-line">
+                        {candidate.profile?.tagline || "Belum diisi"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-3">
+                      <p className="font-semibold text-slate-700">Tentang</p>
+                      <p className="mt-1 whitespace-pre-line">
+                        {candidate.profile?.about || "Belum diisi"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-3">
+                      <p className="font-semibold text-slate-700">Visi</p>
+                      <p className="mt-1 whitespace-pre-line">
+                        {candidate.profile?.visi || "Belum diisi"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-3">
+                      <p className="font-semibold text-slate-700">Misi</p>
+                      <p className="mt-1 whitespace-pre-line">
+                        {candidate.profile?.misi || "Belum diisi"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-3">
+                      <p className="font-semibold text-slate-700">Program Kerja</p>
+                      <p className="mt-1 whitespace-pre-line">
+                        {candidate.profile?.programKerja || "Belum diisi"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -230,12 +499,14 @@ function CandidateRow({
   isOpen,
   nimAlreadyVoted,
   onNimVoted,
+  onCandidateInfo,
 }: {
   electionId: bigint;
   id: bigint;
   isOpen: boolean;
   nimAlreadyVoted: boolean;
   onNimVoted: () => void;
+  onCandidateInfo?: (info: { id: string; name: string; photoUrl?: string | null } | null) => void;
 }) {
   const { address } = useAccount();
   const useWalletMode = false;
@@ -400,6 +671,17 @@ function CandidateRow({
       ignore = true;
     };
   }, [backendBase, electionId, id]);
+
+  useEffect(() => {
+    if (!onCandidateInfo || !data) return;
+    const [cid, name, _voteCount, isActive] = data;
+    if (!isActive) return;
+    onCandidateInfo({
+      id: cid.toString(),
+      name,
+      photoUrl,
+    });
+  }, [data, onCandidateInfo, photoUrl]);
 
   if (isLoading) return <li className="text-sm">Loading kandidat #{id.toString()}...</li>;
   if (error)

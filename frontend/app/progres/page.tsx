@@ -25,20 +25,36 @@ export default function PublicProgressPage() {
   const [items, setItems] = useState<ProgressItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pollIntervalMs = 10000;
 
   useEffect(() => {
-    setLoading(true);
-    fetch("/api/public/progress")
-      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
-      .then((result) => {
-        if (result.ok) {
-          setItems(result.data.items ?? []);
-        } else {
-          setError(result.data?.reason ?? "Gagal memuat progress");
-        }
-      })
-      .catch(() => setError("Gagal menghubungi server"))
-      .finally(() => setLoading(false));
+    let ignore = false;
+    const fetchProgress = () => {
+      setLoading(true);
+      fetch("/api/public/progress")
+        .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+        .then((result) => {
+          if (ignore) return;
+          if (result.ok) {
+            setItems(result.data.items ?? []);
+            setError(null);
+          } else {
+            setError(result.data?.reason ?? "Gagal memuat progress");
+          }
+        })
+        .catch(() => {
+          if (!ignore) setError("Gagal menghubungi server");
+        })
+        .finally(() => {
+          if (!ignore) setLoading(false);
+        });
+    };
+    fetchProgress();
+    const id = window.setInterval(fetchProgress, pollIntervalMs);
+    return () => {
+      ignore = true;
+      window.clearInterval(id);
+    };
   }, []);
 
   const activeItems = useMemo(() => items, [items]);
@@ -105,6 +121,17 @@ function ProgressCard({ item }: { item: ProgressItem }) {
     return copy;
   }, [item.candidates, item.electionId]);
 
+  const activeCount = shuffledCandidates.length;
+  const totalVotes = item.totalVotes ?? 0;
+  const candidateRows = shuffledCandidates.map((candidate, index) => ({
+    label: `Pilihan ${index + 1}`,
+    votes: candidate.voteCount,
+    pct:
+      totalVotes === 0
+        ? 0
+        : Math.round((candidate.voteCount / totalVotes) * 100),
+  }));
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -122,18 +149,30 @@ function ProgressCard({ item }: { item: ProgressItem }) {
           Total suara: {item.totalVotes}
         </div>
       </div>
-      <div className="mt-4 space-y-2">
-        {shuffledCandidates.map((candidate, idx) => (
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
+          Kandidat aktif: {activeCount}
+        </span>
+        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5">
+          Total suara: {item.totalVotes}
+        </span>
+      </div>
+      <div className="mt-5 space-y-3">
+        {candidateRows.map((row) => (
           <div
-            key={`${item.electionId}-${candidate.id}-${idx}`}
-            className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs"
+            key={row.label}
+            className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
           >
-            <span className="font-semibold text-slate-700">
-              Kandidat
-            </span>
-            <span className="font-semibold text-slate-600">
-              {candidate.voteCount}
-            </span>
+            <div className="flex items-center justify-between text-sm text-slate-700">
+              <span className="font-medium">{row.label}</span>
+              <span className="text-xs text-slate-500">{row.pct}%</span>
+            </div>
+            <div className="mt-2 h-2 w-full rounded-full bg-slate-200">
+              <div
+                className="h-2 rounded-full bg-slate-900 transition-all"
+                style={{ width: `${row.pct}%` }}
+              />
+            </div>
           </div>
         ))}
       </div>
