@@ -1,4 +1,4 @@
-# Implementasi Jaringan Blockchain pada Konsorsium E‑Voting Organisasi Kemahasiswaan Menggunakan Hyperledger Besu dan Mekanisme Relayer
+# Implementasi Jaringan Blockchain Konsorsium pada E‑Voting Organisasi Kemahasiswaan Menggunakan Hyperledger Besu dan Mekanisme Relayer
 
 **Votera** adalah aplikasi e‑voting organisasi kemahasiswaan berbasis blockchain dengan peran **Admin** dan **Mahasiswa**.
 Fokus utama: transparansi hasil, validasi identitas pemilih, dan jejak audit admin.
