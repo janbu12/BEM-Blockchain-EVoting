@@ -335,6 +335,43 @@ Jika salah satu service di atas mati, alur vote-verification akan gagal (hard-bl
 
 ---
 
+## Quick Start (Automated Scripts)
+Untuk menghindari menjalankan banyak command manual, gunakan script otomatis di folder `scripts/`.
+
+### PowerShell (Windows)
+```powershell
+.\scripts\start-all.ps1
+```
+
+Opsi:
+- `-DevMode` -> backend/frontend jalan dalam mode dev.
+- `-SetupOnly` -> hanya install/build/deploy, tanpa start service.
+- `-SkipContracts` -> lewati deploy contract.
+- `-SkipBuild` -> lewati build backend/frontend.
+- `-Network besuLocal` -> pilih network hardhat untuk deploy.
+
+### Bash (Linux/macOS/WSL)
+```bash
+./scripts/start-all.sh
+```
+
+Opsi (env):
+- `DEV_MODE=1` -> backend/frontend mode dev.
+- `SETUP_ONLY=1` -> hanya setup, tanpa start service.
+- `SKIP_CONTRACTS=1` -> lewati deploy contract.
+- `SKIP_BUILD=1` -> lewati build backend/frontend.
+- `NETWORK=besuLocal` -> pilih network hardhat untuk deploy.
+
+Catatan:
+- Script PowerShell membuka service di jendela terminal terpisah.
+- Script Bash menjalankan service di background dan menulis log ke:
+  - `.run-campus-service.log`
+  - `.run-face-service.log`
+  - `.run-backend.log`
+  - `.run-frontend.log`
+
+---
+
 ## Alur Penggunaan
 **Admin**
 - Login via `/login`.
